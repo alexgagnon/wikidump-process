@@ -1,2 +1,3 @@
 target/
-wikidata-dump.json.bz2
+*.json.bz2
+!tests/

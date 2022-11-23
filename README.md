@@ -1,8 +1,9 @@
 # Wikidata Preprocess
 
-CLI which enables fetching and processing bzip2 compressed wikidata dumps for further use. It uses the `jq` tool under the hood to filter entities and extract desired properties.
+CLI which enables fetching and processing bzip2 compressed wikidata dumps for further use. It uses the `jq` tool under the hood to filter entities and extract desired properties. The primary reason for this application is that the wikidata dump files are enormous... a ~1Tb file containing a single JSON array when uncompressed, so this helps filtering without needing to decompress first.
 
-NOTE: although `jq` is primarily used to process JSON input, it can output in any format, such as
+Notes:
+- although `jq` is primarily used to process JSON input, it can output in any format, such as csv or arbitrary text
 
 ## Example usage
 
