@@ -10,7 +10,7 @@
 use std::cmp::min;
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read, Write, BufWriter};
 use std::path::{PathBuf};
 use std::time::{Instant};
 use bzip2::read::{MultiBzDecoder};
@@ -111,10 +111,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if args.output_file_path.clone().unwrap().exists() && !args.force_overwrite {
                 panic!("Output file already exists, must use `force-overwrite` flag to continue");
             }
-            output = Box::new(File::create(args.output_file_path.unwrap())?) as Box<dyn Write>;
+            // TODO: handle gracefully
+            let output_file = File::create(args.output_file_path.unwrap());
+            output = Box::new(output_file?) as Box<dyn Write>;
         }
 
-        
         process(args.input_file_path, &mut output, &args.jq_filter, args.continue_on_error)?;
     }
     else {
@@ -125,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &String, continue_on_error: bool) -> Result<(), std::io::Error> {
-    
+    let mut stream = BufWriter::new(output);
     let input = File::open(input.unwrap())?;
     let mut filter = jq_rs::compile(jq_filter).unwrap();
 
@@ -168,24 +169,27 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
         // for each "complete" entities (i.e. terminated with  comma and newline), filter and output
         for entity in &entities[..(entities.len() - 1)] {
             num_entities += 1;
+            debug!("{}", entity);
             let result = &filter.run(entity);
             let filtered_entity = match result {
                 Ok(e) => e,
                 Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", entity, error)} else {&default}
             };
             debug!("{}", filtered_entity);
-            output.write_all(&filtered_entity.as_bytes())?;
+            // TODO: buffer this to not output each line independently
+            stream.write_all(&filtered_entity.as_bytes())?;
             bar.set_message(format!("{}", num_entities));
         }
 
         let last = entities.last_mut().unwrap();
 
-        // the very end of the file will contain a '\n]', remove the two 1 byte ascii chars
+        // the very end of the file will contain a '\n]', signaling it's the last entity
+        // remove the two 1 byte ascii chars and write it out
         if last.ends_with("\n]") {
             *last = &last[..last.len() - 2];
         }
         
-        // reset the string buffer with the (incomplete) last entity
+        // reset the string buffer with the incomplete last entity
         str_buffer = last.to_string();
 
         // create a new empty buffer
@@ -203,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_process() {
-        let input = std::path::Path::new("./tests/test-data.json.bz2").to_path_buf();
-        process(Some(input), &mut std::io::stdout(), &".id".to_string(), false);
+        let input = std::path::Path::new("./tests/invalid-json.json.bz2").to_path_buf();
+        process(Some(input), &mut std::io::stdout(), &".id".to_string(), true);
     }
 }
