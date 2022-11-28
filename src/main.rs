@@ -21,6 +21,7 @@ use log::{debug, info};
 use simdutf8::basic::from_utf8;
 use reqwest;
 
+// Must be large enough to hold the largest entry
 const BUFFER_LENGTH: usize = 500000;
 
 #[derive(Parser, Debug)]
@@ -167,7 +168,7 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
         let mut entities: Vec<&str> = str_buffer.split(",\n").collect();
 
         // for each "complete" entities (i.e. terminated with  comma and newline), filter and output
-        for entity in &entities[..(entities.len() - 1)] {
+        for entity in &entities[..(entities.len())] {
             num_entities += 1;
             debug!("{}", entity);
             let result = &filter.run(entity);
@@ -176,17 +177,8 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
                 Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", entity, error)} else {&default}
             };
             debug!("{}", filtered_entity);
-            // TODO: buffer this to not output each line independently
             stream.write_all(&filtered_entity.as_bytes())?;
             bar.set_message(format!("{}", num_entities));
-        }
-
-        let last = entities.last_mut().unwrap();
-
-        // the very end of the file will contain a '\n]', signaling it's the last entity
-        // remove the two 1 byte ascii chars and write it out
-        if last.ends_with("\n]") {
-            *last = &last[..last.len() - 2];
         }
         
         // reset the string buffer with the incomplete last entity
