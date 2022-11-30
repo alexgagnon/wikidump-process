@@ -1,3 +1,4 @@
 target/
 *.json.bz2
-!tests/*.bz2results/
+!tests/*.bz2
+results/

@@ -691,25 +691,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58893f751c9b0412871a09abd62ecd2a00298c6c83befa223ef98c52aef40cbe"
 
 [[package]]
-name = "preprocess"
-version = "0.1.0"
-dependencies = [
- "bzip2",
- "clap",
- "env_logger",
- "futures-util",
- "indicatif",
- "jq-rs",
- "log",
- "reqwest",
- "serde",
- "serde_json",
- "simdutf8",
- "tempfile",
- "tokio",
-]
-
-[[package]]
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1241,6 +1222,25 @@ checksum = "c060b319f29dd25724f09a2ba1418f142f539b2be99fbf4d2d5a8f7330afb8eb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "wikidump-process"
+version = "0.1.0"
+dependencies = [
+ "bzip2",
+ "clap",
+ "env_logger",
+ "futures-util",
+ "indicatif",
+ "jq-rs",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "simdutf8",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

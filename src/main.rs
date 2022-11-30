@@ -129,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &String, continue_on_error: bool) -> Result<(), std::io::Error> {
     let mut stream = BufWriter::new(output);
-    let input = File::open(input.unwrap())?;
+    let input = File::open(input.expect("Could not get path"))?;
     let mut filter = jq_rs::compile(jq_filter).expect("Could not compile jq filter");
 
     let size = input.metadata()?.len();
@@ -148,7 +148,7 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
 
     bar.set_draw_rate(1);
     bar.set_style(ProgressStyle::default_bar()
-    .template("[{elapsed_precise}] Processed {bytes}, {msg} entities")
+    .template("{msg}\n{spinner:.green} [{elapsed_precise}] ({bytes_per_sec})")
     .progress_chars("#>-"));
 
     // discard the first two bytes representing "[\n"
@@ -156,6 +156,7 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
     md.read(&mut [0u8; 2])?;
 
     let mut num_entities = 0;
+    let mut num_entities_output = 0;
     let mut n = md.read(&mut buffer)?;
     
     let start = Instant::now();
@@ -174,19 +175,13 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
         // iterate over the "complete" entities
         // &mut so we can mutably borrow each item in the vector
         for entity in &mut entities[..(length - 1)] {
-            debug!("{}", entity);
-            let result = filter.run(&entity);
-            let filtered_entity = match result {
-                Ok(e) => e,
-                Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", entity, error)} else {String::from("null")}
-            };
-            debug!("{}", filtered_entity);
-            debug!("---");
-            stream.write(filtered_entity.as_bytes()).expect("Could not write");
-
-            // stream.write(filter_entity(entity, &mut filter, continue_on_error).as_bytes()).expect("Could not write");
+            let filtered_entity = filter_entity(entity, &mut filter, continue_on_error);
             num_entities += 1;
-            bar.set_message(format!("{}", num_entities));
+            if !filtered_entity.eq("") {
+                stream.write(filtered_entity.as_bytes()).expect("Could not write");
+                num_entities_output += 1;
+            }
+            bar.set_message(format!("Processed {} entities, {} outputted", num_entities, num_entities_output));
         }
 
         // mutable ref to entities done here
@@ -197,16 +192,13 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
             debug!("Last entity");
             *last = &last[..last.len() - 2];
             debug!("{}", last);
-            let result = filter.run(last);
-            let filtered_entity = match result {
-                Ok(e) => e,
-                Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", last, error)} else {String::from("null")}
-            };
-            debug!("{}", filtered_entity);
-            debug!("---");
-            stream.write(filtered_entity.as_bytes()).expect("Could not write");
-            // stream.write(filter_entity(last, &mut filter, continue_on_error).as_bytes()).expect("Could not write");
+            let filtered_entity = filter_entity(last, &mut filter, continue_on_error);
             num_entities += 1;
+            if !filtered_entity.eq("") {
+                stream.write(filtered_entity.as_bytes()).expect("Could not write");
+                num_entities_output += 1;
+            }
+            bar.set_message(format!("Processed {} entities, {} outputted", num_entities, num_entities_output));
             break;
         }
 
@@ -218,7 +210,7 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
         n = md.read(&mut buffer)?;
     }
     stream.flush().expect("Could not flush");
-    bar.finish_with_message(format!("Finished! Processed {}, with {} entities in {}", HumanBytes(total_bytes), num_entities, HumanDuration(start.elapsed())));
+    bar.finish_with_message(format!("Finished! Processed {} entities and outputted {} in {}", HumanBytes(total_bytes), num_entities, HumanDuration(start.elapsed())));
     Ok(())
 }
 
@@ -227,7 +219,12 @@ fn filter_entity(entity: &str, filter: &mut JqProgram, continue_on_error: bool) 
     let result = filter.run(&entity);
     let filtered_entity = match result {
         Ok(e) => e,
-        Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", entity, error)} else {String::from("null")}
+        Err(error) => if !continue_on_error {
+            panic!("Could not parse: {}. {}", entity, error)
+        } else {
+            info!("Could not parse: {}", entity);
+            String::from("null")
+        }
     };
     debug!("{}", filtered_entity);
     debug!("---");
