@@ -17,11 +17,12 @@ use bzip2::read::{MultiBzDecoder};
 use clap::{Parser};
 use futures_util::StreamExt;
 use indicatif::{HumanDuration, ProgressBar, ProgressStyle, HumanBytes};
+use jq_rs::JqProgram;
 use log::{debug, info};
 use simdutf8::basic::from_utf8;
 use reqwest;
 
-// Must be large enough to hold the largest entry
+// must be large enough to hold the largest entry
 const BUFFER_LENGTH: usize = 500000;
 
 #[derive(Parser, Debug)]
@@ -129,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &String, continue_on_error: bool) -> Result<(), std::io::Error> {
     let mut stream = BufWriter::new(output);
     let input = File::open(input.unwrap())?;
-    let mut filter = jq_rs::compile(jq_filter).unwrap();
+    let mut filter = jq_rs::compile(jq_filter).expect("Could not compile jq filter");
 
     let size = input.metadata()?.len();
     debug!("Opening {:?}, size: {}", input, size);
@@ -158,40 +159,80 @@ pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &Stri
     let mut n = md.read(&mut buffer)?;
     
     let start = Instant::now();
-    let default = "null".to_string();
 
     while n > 0 {
         total_bytes += n as u64;
         bar.inc(n as u64);
-        // convert to string and split on newlines
-        str_buffer.push_str(&from_utf8(&buffer[..n]).unwrap());
-        let mut entities: Vec<&str> = str_buffer.split(",\n").collect();
 
-        // for each "complete" entities (i.e. terminated with  comma and newline), filter and output
-        for entity in &entities[..(entities.len())] {
-            num_entities += 1;
+        // convert to utf8 string and split on newlines
+        str_buffer.push_str(&from_utf8(&buffer[..n]).expect("Could not convert to string"));
+
+        // a vector of string slices
+        let mut entities: Vec<&str> = str_buffer.split(",\n").collect();
+        let length = entities.len();
+
+        // iterate over the "complete" entities
+        // &mut so we can mutably borrow each item in the vector
+        for entity in &mut entities[..(length - 1)] {
             debug!("{}", entity);
-            let result = &filter.run(entity);
+            let result = filter.run(&entity);
             let filtered_entity = match result {
                 Ok(e) => e,
-                Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", entity, error)} else {&default}
+                Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", entity, error)} else {String::from("null")}
             };
             debug!("{}", filtered_entity);
-            stream.write_all(&filtered_entity.as_bytes())?;
+            debug!("---");
+            stream.write(filtered_entity.as_bytes()).expect("Could not write");
+
+            // stream.write(filter_entity(entity, &mut filter, continue_on_error).as_bytes()).expect("Could not write");
+            num_entities += 1;
             bar.set_message(format!("{}", num_entities));
         }
-        
+
+        // mutable ref to entities done here
+        let last = entities.last_mut().expect("Could not get last item");
+
+        // the very end of the file will contain a '\n]', remove the two 1 byte ascii chars and allow it to be processed
+        if last.ends_with("\n]") {
+            debug!("Last entity");
+            *last = &last[..last.len() - 2];
+            debug!("{}", last);
+            let result = filter.run(last);
+            let filtered_entity = match result {
+                Ok(e) => e,
+                Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", last, error)} else {String::from("null")}
+            };
+            debug!("{}", filtered_entity);
+            debug!("---");
+            stream.write(filtered_entity.as_bytes()).expect("Could not write");
+            // stream.write(filter_entity(last, &mut filter, continue_on_error).as_bytes()).expect("Could not write");
+            num_entities += 1;
+            break;
+        }
+
         // reset the string buffer with the incomplete last entity
         str_buffer = last.to_string();
 
-        // create a new empty buffer
+        // clear the buffer by creating a new one
         buffer = [0; BUFFER_LENGTH];
         n = md.read(&mut buffer)?;
     }
-
-    bar.finish_with_message(format!("Finished! Processed {}, with {} entities in {}", HumanBytes(total_bytes), num_entities + 1, HumanDuration(start.elapsed())));
+    stream.flush().expect("Could not flush");
+    bar.finish_with_message(format!("Finished! Processed {}, with {} entities in {}", HumanBytes(total_bytes), num_entities, HumanDuration(start.elapsed())));
     Ok(())
 }
+
+fn filter_entity(entity: &str, filter: &mut JqProgram, continue_on_error: bool) -> String {
+    debug!("{}", entity);
+    let result = filter.run(&entity);
+    let filtered_entity = match result {
+        Ok(e) => e,
+        Err(error) => if !continue_on_error {panic!("Could not parse: {}. {}", entity, error)} else {String::from("null")}
+    };
+    debug!("{}", filtered_entity);
+    debug!("---");
+    filtered_entity
+} 
 
 #[cfg(test)]
 mod tests {
