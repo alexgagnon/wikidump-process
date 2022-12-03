@@ -23,7 +23,9 @@ jobs:
           #   archive: zip
     steps:
       - uses: actions/checkout@master
-      - shell: apt install jq autotools
+      - run: apt install jq autotools
+        name: Install additional tools
+        shell: bash
       - name: Compile and release
         uses: rust-build/rust-build.action@v1.4.0
         env:
