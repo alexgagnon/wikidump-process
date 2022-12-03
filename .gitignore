@@ -1,4 +1,4 @@
 target/
 *.json.bz2
 !tests/*.bz2
-results/
+data/

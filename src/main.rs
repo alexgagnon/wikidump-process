@@ -129,16 +129,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn process(input: Option<PathBuf>, output: &mut impl Write, jq_filter: &String, continue_on_error: bool) -> Result<(), std::io::Error> {
     let mut stream = BufWriter::new(output);
-    let input = File::open(input.expect("Could not get path"))?;
+    let input = input.expect("Could not get path");
+    let file = File::open(&input)?;
     let mut filter = jq_rs::compile(jq_filter).expect("Could not compile jq filter");
-
-    let size = input.metadata()?.len();
-    debug!("Opening {:?}, size: {}", input, size);
+    
+    let size = file.metadata()?.len();
+    debug!("Opening {:?}, size: {}", input.as_path(), size);
 
     let mut total_bytes: u64 = 0;
 
     debug!("Initializing buffer to size {}", BUFFER_LENGTH);
-    let reader = BufReader::new(input);
+    let reader = BufReader::new(file);
     let mut md = MultiBzDecoder::new(reader);
 
     let mut buffer = [0; BUFFER_LENGTH];
