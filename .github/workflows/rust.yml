@@ -1,5 +1,3 @@
-# .github/workflows/release.yml
-
 on:
   release:
     types: [created]
@@ -23,7 +21,7 @@ jobs:
           #   archive: zip
     steps:
       - uses: actions/checkout@master
-      - run: apt install jq autotools
+      - run: sudo apt-get install jq autotools
         name: Install additional tools
         shell: bash
       - name: Compile and release
