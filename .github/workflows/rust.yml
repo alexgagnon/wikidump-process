@@ -15,14 +15,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-pc-windows-gnu
-            archive: zip
+          # - target: x86_64-pc-windows-gnu
+          #   archive: zip
           - target: x86_64-unknown-linux-musl
             archive: tar.gz
-          - target: x86_64-apple-darwin
-            archive: zip
+          # - target: x86_64-apple-darwin
+          #   archive: zip
     steps:
       - uses: actions/checkout@master
+      - shell: apt install jq autotools
       - name: Compile and release
         uses: rust-build/rust-build.action@v1.4.0
         env:
