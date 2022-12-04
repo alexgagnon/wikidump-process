@@ -21,7 +21,7 @@ jobs:
           #   archive: zip
     steps:
       - uses: actions/checkout@master
-      - run: sudo apt-get update && sudo apt-get -y install jq autotools-dev autoconf dh-autoreconf
+      - run: sudo apt-get update && sudo apt-get -y install jq autotools-dev autoconf dh-autoreconf automake
         name: Install additional tools
         shell: bash
       - name: Compile and release
